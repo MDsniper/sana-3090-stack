@@ -238,7 +238,8 @@ def use_library_image(path):
 
 
 def build_ui():
-    with gr.Blocks(title="SANA Image Generation", theme=gr.themes.Soft()) as demo:
+    # theme belongs on launch() from Gradio 6 on; passing it here is ignored.
+    with gr.Blocks(title="SANA Image Generation") as demo:
         lib_items = gr.State([])   # exact list currently painted in the Library gallery
         lib_sel = gr.State(None)   # path of the library image the user clicked
         with gr.Tabs() as tabs:
@@ -319,4 +320,4 @@ def build_ui():
 
 if __name__ == "__main__":
     build_ui().launch(server_name="0.0.0.0", server_port=int(os.getenv("SANA_PORT", "7860")),
-                      allowed_paths=[OUTPUT_DIR])
+                      theme=gr.themes.Soft(), allowed_paths=[OUTPUT_DIR])
