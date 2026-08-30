@@ -174,6 +174,33 @@ def reset_optimal():
     return (OPTIMAL["steps"], OPTIMAL["guidance"])
 
 
+def engine_status_text() -> str:
+    try:
+        s = httpx.get(f"{ENGINE}/v1/engine/status", timeout=10).json()
+        return (f"Engine: **{s['state']}** · VRAM allocated {s['cuda_allocated_mb']:.0f} MB · "
+                f"reserved {s['cuda_reserved_mb']:.0f} MB")
+    except Exception as e:  # noqa: BLE001
+        return f"Engine status unavailable ({type(e).__name__})"
+
+
+def clear_vram():
+    r = httpx.post(f"{ENGINE}/v1/engine/unload", timeout=120)
+    r.raise_for_status()
+    return engine_status_text() + " — model unloaded; next Generate reloads it (~1 min)"
+
+
+def caption_from_image(path: str) -> str:
+    if not path:
+        raise gr.Error("Upload an image first.")
+    with open(path, "rb") as f:
+        r = httpx.post(f"{ENGINE}/v1/images/caption", files={"file": f}, timeout=300)
+    r.raise_for_status()
+    cap = r.json()["caption"]
+    if not cap.strip():
+        raise gr.Error("Captioning returned nothing — try another image.")
+    return cap
+
+
 def load_library():
     """Newest-first (path, caption) pairs for every image ever generated."""
     files = sorted(pathlib.Path(OUTPUT_DIR).rglob("*.png"),
@@ -201,6 +228,9 @@ def build_ui():
                             use_neg.change(lambda v: gr.update(visible=v), use_neg, neg)
                             style_dd = gr.Dropdown(list(STYLES), value="(No style)",
                                                    label="Style preset")
+                        with gr.Accordion("📷 Remix from image", open=False):
+                            img_in = gr.Image(type="filepath", label="Upload an image")
+                            remix_btn = gr.Button("📷 Describe image → prompt")
                         with gr.Accordion("Advanced options (optimal: 20 steps · cfg 4.5)",
                                           open=False):
                             with gr.Row():
@@ -209,6 +239,8 @@ def build_ui():
                                 guidance = gr.Slider(0.0, 15.0, value=OPTIMAL["guidance"],
                                                      step=0.1, label="CFG Guidance scale")
                             optimal_btn = gr.Button("Reset to optimal (20 steps · cfg 4.5)")
+                            vram_md = gr.Markdown(engine_status_text())
+                            clear_vram_btn = gr.Button("🧹 Clear VRAM (unload model)")
                     with gr.Column(scale=2):
                         gallery = gr.Gallery(label="Results", format="png", height=420, columns=2)
                         info_md = gr.Markdown()
@@ -234,6 +266,9 @@ def build_ui():
                               num_images, seed, randomize],
                       outputs=[gallery, seed, info_md],
                       api_name=False).then(load_library, None, lib_gallery)
+        remix_btn.click(caption_from_image, img_in, prompt, api_name="remix")
+        clear_vram_btn.click(clear_vram, None, vram_md, api_name="clear_vram")
+        demo.load(engine_status_text, None, vram_md)
         refresh_btn.click(load_library, None, lib_gallery, api_name="library")
         demo.load(load_library, None, lib_gallery)
     return demo

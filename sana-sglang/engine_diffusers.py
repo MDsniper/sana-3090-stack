@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 
 import torch
 from diffusers import SanaPipeline
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -29,6 +29,7 @@ MODEL_REPO = os.getenv("SANA_MODEL_REPO", "Efficient-Large-Model/SANA1.5_4.8B_10
 SERVED_NAME = os.getenv("SANA_SERVED_NAME", "sana-1.5-4.8b")
 MAX_SEED = 2**32 - 1
 DTYPE = torch.bfloat16
+CAPTION_REPO = os.getenv("SANA_CAPTION_REPO", "Salesforce/blip-image-captioning-large")
 
 # Same tuned default the SGLang sampler ships; keeps UI behavior engine-agnostic.
 DEFAULT_NEGATIVE = (
@@ -47,26 +48,41 @@ class Engine:
 
     def load(self):
         with self.lock:
-            if self.pipe is not None:
-                return
-            self.state, self.detail = "loading", f"loading {MODEL_REPO}"
-            t0 = time.time()
-            try:
-                pipe = SanaPipeline.from_pretrained(MODEL_REPO, torch_dtype=DTYPE)
-                pipe.to(DEVICE)
-                pipe.vae.enable_tiling()
-                self.pipe = pipe
-                self.state, self.detail = "ready", ""
-                print(f"[engine] loaded {MODEL_REPO} in {time.time()-t0:.1f}s", flush=True)
-            except Exception as e:  # noqa: BLE001
-                self.state, self.detail = "error", str(e)
-                raise
+            self._load_locked()
+
+    def _load_locked(self):
+        if self.pipe is not None:
+            return
+        self.state, self.detail = "loading", f"loading {MODEL_REPO}"
+        t0 = time.time()
+        try:
+            pipe = SanaPipeline.from_pretrained(MODEL_REPO, torch_dtype=DTYPE)
+            pipe.to(DEVICE)
+            pipe.vae.enable_tiling()
+            self.pipe = pipe
+            self.state, self.detail = "ready", ""
+            print(f"[engine] loaded {MODEL_REPO} in {time.time()-t0:.1f}s", flush=True)
+        except Exception as e:  # noqa: BLE001
+            self.state, self.detail = "error", str(e)
+            raise
+
+    def unload(self):
+        """Drop the pipeline and release VRAM; next generate() reloads on demand."""
+        with self.lock:
+            if self.pipe is None:
+                return {"state": self.state, "note": "already unloaded"}
+            self.pipe = None
+            gc.collect()
+            torch.cuda.empty_cache()
+            self.state, self.detail = "idle", "model unloaded (VRAM cleared)"
+            return {"state": "idle",
+                    "cuda_allocated_mb": round(torch.cuda.memory_allocated() / 2**20, 1)}
 
     @torch.inference_mode()
     def generate(self, *, prompt: str, negative_prompt: str | None, width: int, height: int,
                  steps: int, guidance: float, n: int, seed: int):
-        neg = negative_prompt if negative_prompt is not None else DEFAULT_NEGATIVE
         with self.lock:
+            self._load_locked()  # lazy reload after a Clear VRAM unload
             if self.pipe is None:
                 raise HTTPException(503, f"engine not ready ({self.state}: {self.detail})")
             gen = torch.Generator(device=DEVICE).manual_seed(int(seed))
@@ -144,6 +160,44 @@ def generate(req: ImageRequest):
         img.save(buf, format="PNG")
         data.append({"b64_json": base64.b64encode(buf.getvalue()).decode()})
     return {"created": int(time.time()), "data": data}
+
+@app.get("/v1/engine/status")
+def engine_status():
+    return {"state": ENGINE.state, "detail": ENGINE.detail,
+            "cuda_allocated_mb": round(torch.cuda.memory_allocated() / 2**20, 1),
+            "cuda_reserved_mb": round(torch.cuda.memory_reserved() / 2**20, 1)}
+
+
+@app.post("/v1/engine/unload")
+def engine_unload():
+    return ENGINE.unload()
+
+
+@app.post("/v1/images/caption")
+def caption_image(file: bytes = File(...)):
+    """BLIP captioning for image remix: uploaded image -> text prompt.
+
+    Loads BLIP (~1 GB fp16) on demand and frees it after, so Clear VRAM stays true.
+    First call downloads the model into the HF cache volume.
+    """
+    from PIL import Image
+    from transformers import BlipForConditionalGeneration, BlipProcessor
+    t0 = time.time()
+    try:
+        proc = BlipProcessor.from_pretrained(CAPTION_REPO)
+        model = BlipForConditionalGeneration.from_pretrained(CAPTION_REPO, torch_dtype=torch.float16).to(DEVICE)
+        img = Image.open(io.BytesIO(file)).convert("RGB")
+        inputs = proc(img, return_tensors="pt").to(DEVICE, torch.float16)
+        with torch.inference_mode():
+            out = model.generate(**inputs, max_new_tokens=48)
+        text = proc.decode(out[0], skip_special_tokens=True).strip()
+        return {"caption": text, "ms": int((time.time() - t0) * 1000)}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"captioning failed: {type(e).__name__}: {e}") from e
+    finally:
+        del proc, model, inputs
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":

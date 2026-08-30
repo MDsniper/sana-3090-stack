@@ -172,7 +172,8 @@ Quality verification methodology (also used to sanity-check every non-square pre
 
 | Feature | Detail |
 |---|---|
-| ✨ Improve prompt | Local Qwen3.5-35B rewrites prompts per SANA best practice (concrete visual detail, one scene, no negations, no text-in-image, 2–3 sentences). ~15–30 s. Degrades to a visible error if the LLM is down. |
+| 🧹 Clear VRAM | Unloads the model (15.2 GB → 0.3 GB measured); live status line in Advanced; next Generate reloads automatically. |
+| 📷 Remix from image | Upload an image → BLIP-large captions it on the engine GPU → caption fills the prompt box. SANA is text-to-image only, so this is the honest image-input path: caption → (optionally ✨ improve) → generate. | Local Qwen3.5-35B rewrites prompts per SANA best practice (concrete visual detail, one scene, no negations, no text-in-image, 2–3 sentences). ~15–30 s. Degrades to a visible error if the LLM is down. |
 | Format presets | 9 platform formats (§4). Locked to /32-safe sizes — no way to request a decode-breaking size from the UI. |
 | Styles | 10 NVlabs originals + **277 Fooocus styles** (all six official sets). Placeholder styles wrap `{prompt}`; suffix styles append; negative-only enhancers ("Fooocus Enhance") merge negatives only. |
 | Optimal settings | 1024 native / 20 steps / CFG 4.5 fixed by default; steps + CFG live in a collapsed Advanced accordion with a one-click Reset to optimal. |
@@ -192,6 +193,12 @@ curl http://localhost:30000/v1/images/generations \
        "seed":42,"response_format":"b64_json"}'
 ```
 
+`GET /v1/engine/status` → `{state, cuda_allocated_mb, cuda_reserved_mb}` ·
+`POST /v1/engine/unload` → drops the pipeline and releases ~15 GB VRAM (measured
+15,202 MiB → 266 MiB); the next generation lazily reloads (~20 s warm page cache) ·
+`POST /v1/images/caption` (multipart `file`) → BLIP-large caption for image remix
+(24 s cold incl. model download, 2.7 s warm; BLIP freed after each call so Clear VRAM
+stays true). Health reports `state: idle` after an unload — treated as healthy by design.
 `GET /health` → `{status, state: idle|loading|ready|error, loaded_model}` ·
 `GET /v1/models` → served model descriptor. Generation is lock-serialized (single GPU,
 one pipeline resident).
