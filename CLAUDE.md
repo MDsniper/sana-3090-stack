@@ -110,3 +110,11 @@ this checkpoint's measured optima.
 
 GPU assignment is pinned in `docker-compose.yml` via `device_ids` — `"1"` for SANA, `"0"` for the
 LLM. HF weights live in the `sana-hf-cache` volume; deleting it forces a multi-GB re-download.
+
+Python dependencies in both Dockerfiles are pinned with `==` to the set measured on this box.
+They were previously ranges, and both drifted across a major version unnoticed: `transformers`
+4.x → 5.16.1, and `gradio` 5 → 6, the latter silently dropping the UI's theme. Don't relax a pin
+back to a range. To move one, bump it deliberately, rebuild, and re-verify a generation plus a
+caption before committing — a rebuild is the only thing that reinstalls, so a drifted dependency
+surfaces at the worst moment otherwise. Note the pip layer invalidates on any pin change, making
+that rebuild a full reinstall (a few minutes), not the usual seconds.

@@ -1,6 +1,11 @@
 FROM python:3.12-slim
 
-RUN pip install --no-cache-dir "gradio>=5" httpx pillow
+# Pinned: ">=5" silently resolved to 6.x, which moved `theme` off the Blocks
+# constructor and rendered the UI unthemed. Bump deliberately, then re-verify.
+RUN pip install --no-cache-dir \
+    "gradio==6.26.0" \
+    "httpx==0.28.1" \
+    "pillow==12.3.0"
 WORKDIR /app
 COPY ui.py fooocus_styles.json ./
 

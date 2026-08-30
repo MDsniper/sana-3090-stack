@@ -1,17 +1,20 @@
 FROM pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime
 
+# Pinned to the exact set measured on this box (see README §5). Floating
+# ranges here drift on every rebuild: transformers had already moved 4.x -> 5.x
+# under a ">=4.53" pin. To move a pin deliberately, bump it, rebuild, and
+# re-verify a generation before committing.
 RUN pip install --no-cache-dir \
-    "diffusers>=0.36" \
-    "transformers>=4.53" \
-    accelerate \
-    sentencepiece \
-    protobuf \
-    safetensors \
-    fastapi \
-    "uvicorn[standard]" \
-    pillow \
-    python-multipart
-
+    "diffusers==0.40.0" \
+    "transformers==5.16.1" \
+    "accelerate==1.14.0" \
+    "sentencepiece==0.2.2" \
+    "protobuf==7.36.0" \
+    "safetensors==0.8.0" \
+    "fastapi==0.141.1" \
+    "uvicorn[standard]==0.52.4" \
+    "pillow==11.3.0" \
+    "python-multipart==0.0.32"
 WORKDIR /app
 COPY engine_diffusers.py .
 
