@@ -89,7 +89,7 @@ class Engine:
             t0 = time.time()
             out = self.pipe(
                 prompt=prompt,
-                negative_prompt=neg or None,
+                negative_prompt=negative_prompt or None,
                 height=int(height), width=int(width),
                 num_inference_steps=int(steps),
                 guidance_scale=float(guidance),
@@ -182,6 +182,9 @@ def caption_image(file: bytes = File(...)):
     """
     from PIL import Image
     from transformers import BlipForConditionalGeneration, BlipProcessor
+    # Pre-bind so the finally cleanup can't NameError over the real failure
+    # when a load raises before these are assigned.
+    proc = model = inputs = None
     t0 = time.time()
     try:
         proc = BlipProcessor.from_pretrained(CAPTION_REPO)
