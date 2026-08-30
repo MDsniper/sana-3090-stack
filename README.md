@@ -178,7 +178,7 @@ Quality verification methodology (also used to sanity-check every non-square pre
 | Styles | 10 NVlabs originals + **277 Fooocus styles** (all six official sets). Placeholder styles wrap `{prompt}`; suffix styles append; negative-only enhancers ("Fooocus Enhance") merge negatives only. |
 | Optimal settings | 1024 native / 20 steps / CFG 4.5 fixed by default; steps + CFG live in a collapsed Advanced accordion with a one-click Reset to optimal. |
 | Seed & batch | Randomize (default) or fixed seed; 1–4 images per run. |
-| 📚 Library | Every PNG ever generated, newest first (500 served), date/filename captions, click → lightbox → download. Auto-refreshes after each generation; served from the shared outputs volume so history survives rebuilds. |
+| 📚 Library | Every PNG ever generated, newest first (500 served), date/filename captions, click → lightbox → download. Click an image then **📷 Use as input image** to send it to Remix on the Generate tab (switches tab, opens the accordion) — caption and regenerate variations of anything already made. Auto-refreshes after each generation; served from the shared outputs volume so history survives rebuilds. |
 | Negative prompt | Unchecked = SGLang-derived tuned default; optional custom box. |
 
 ### Engine API (:30000, OpenAI-style)

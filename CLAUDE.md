@@ -93,6 +93,12 @@ Python files are `COPY`d into the images, not bind-mounted.
 - Images are written to `/data/outputs/<YYYY-MM-DD>/<uuid>_<seed>.png` on the `sana-outputs`
   volume; the Library tab reads that volume, so history survives rebuilds. Gradio serves those
   paths via `allowed_paths=[OUTPUT_DIR]`.
+- Library selection is **by gallery index**, so the `lib_items` State must always hold the exact
+  list the gallery is painting. `refresh_library()` returns both from one `load_library()` call and
+  clears any pending selection, because a refresh reorders the list (newest first) and would
+  otherwise leave the index pointing at a different image. Every place that repaints the gallery
+  must write the whole `lib_out` group. Clicking only records the pick — the ⬇ preview/download
+  flow stays intact — and `📷 Use as input image` is what sets `img_in` and switches tabs.
 
 ## Configuration
 

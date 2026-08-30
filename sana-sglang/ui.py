@@ -208,10 +208,41 @@ def load_library():
     return [(str(p), f"{p.parent.name}/{p.name}") for p in files[:500]]
 
 
+NO_SELECTION = "_No image selected — click one in the gallery below._"
+
+
+def refresh_library():
+    """Repaint the gallery and mirror its exact contents into state.
+
+    Selection is by gallery index, so the state must be the same list the
+    user is looking at; a refresh reorders it (newest first), which is why
+    any pending selection is dropped here.
+    """
+    items = load_library()
+    return items, items, None, NO_SELECTION
+
+
+def select_library_image(items, evt: gr.SelectData):
+    """Remember which library image was clicked (does not leave the tab)."""
+    if not items or evt.index is None or evt.index >= len(items):
+        return None, "_Selection is stale — hit 🔄 Refresh library and try again._"
+    path, caption = items[evt.index]
+    return path, f"Selected **{caption}** — now click *📷 Use as input image*."
+
+
+def use_library_image(path):
+    """Send the selected library image to the Remix input on the Generate tab."""
+    if not path:
+        raise gr.Error("Click an image in the library first, then use this button.")
+    return path, gr.Tabs(selected="generate"), gr.Accordion(open=True)
+
+
 def build_ui():
     with gr.Blocks(title="SANA Image Generation", theme=gr.themes.Soft()) as demo:
-        with gr.Tabs():
-            with gr.Tab("🎨 Generate"):
+        lib_items = gr.State([])   # exact list currently painted in the Library gallery
+        lib_sel = gr.State(None)   # path of the library image the user clicked
+        with gr.Tabs() as tabs:
+            with gr.Tab("🎨 Generate", id="generate"):
                 with gr.Row():
                     with gr.Column(scale=3):
                         fmt_dd = gr.Dropdown(list(FORMATS), value=list(FORMATS)[0], label="Format",
@@ -228,8 +259,9 @@ def build_ui():
                             use_neg.change(lambda v: gr.update(visible=v), use_neg, neg)
                             style_dd = gr.Dropdown(list(STYLES), value="(No style)",
                                                    label="Style preset")
-                        with gr.Accordion("📷 Remix from image", open=False):
-                            img_in = gr.Image(type="filepath", label="Upload an image")
+                        with gr.Accordion("📷 Remix from image", open=False) as remix_acc:
+                            img_in = gr.Image(type="filepath",
+                                              label="Upload an image (or send one from 📚 Library)")
                             remix_btn = gr.Button("📷 Describe image → prompt")
                         with gr.Accordion("Advanced options (optimal: 20 steps · cfg 4.5)",
                                           open=False):
@@ -248,29 +280,40 @@ def build_ui():
                             num_images = gr.Slider(1, 4, value=1, step=1, label="Num images")
                             seed = gr.Slider(0, MAX_SEED, value=0, step=1, label="Seed")
                             randomize = gr.Checkbox(True, label="Randomize seed")
-            with gr.Tab("📚 Library"):
+            with gr.Tab("📚 Library", id="library"):
                 lib_md = gr.Markdown("Every image ever generated, newest first. "
-                                     "Click an image, then the ⬇ button to download.")
-                refresh_btn = gr.Button("🔄 Refresh library")
+                                     "Click an image, then the ⬇ button to download — "
+                                     "or send it to 📷 Remix as an input image.")
+                with gr.Row():
+                    refresh_btn = gr.Button("🔄 Refresh library")
+                    use_btn = gr.Button("📷 Use as input image", variant="primary")
+                sel_md = gr.Markdown(NO_SELECTION)
                 lib_gallery = gr.Gallery(label="Library", height=560, columns=4,
                                          object_fit="contain")
+        lib_out = [lib_gallery, lib_items, lib_sel, sel_md]
         improve_btn.click(improve_prompt, prompt, prompt, api_name="improve_prompt")
         optimal_btn.click(reset_optimal, None, [steps, guidance], api_name="reset_optimal")
         go.click(generate,
                  inputs=[prompt, neg, use_neg, style_dd, fmt_dd, steps, guidance,
                          num_images, seed, randomize],
                  outputs=[gallery, seed, info_md],
-                 api_name="generate").then(load_library, None, lib_gallery)
+                 api_name="generate").then(refresh_library, None, lib_out)
         prompt.submit(generate,
                       inputs=[prompt, neg, use_neg, style_dd, fmt_dd, steps, guidance,
                               num_images, seed, randomize],
                       outputs=[gallery, seed, info_md],
-                      api_name=False).then(load_library, None, lib_gallery)
+                      api_name=False).then(refresh_library, None, lib_out)
         remix_btn.click(caption_from_image, img_in, prompt, api_name="remix")
         clear_vram_btn.click(clear_vram, None, vram_md, api_name="clear_vram")
         demo.load(engine_status_text, None, vram_md)
-        refresh_btn.click(load_library, None, lib_gallery, api_name="library")
-        demo.load(load_library, None, lib_gallery)
+        refresh_btn.click(refresh_library, None, lib_out, api_name="library")
+        # Clicking only records the pick, so the gallery's own preview/download
+        # flow still works; the button is what leaves the tab.
+        lib_gallery.select(select_library_image, lib_items, [lib_sel, sel_md],
+                           api_name=False)
+        use_btn.click(use_library_image, lib_sel, [img_in, tabs, remix_acc],
+                      api_name="use_library_image")
+        demo.load(refresh_library, None, lib_out)
     return demo
 
 
