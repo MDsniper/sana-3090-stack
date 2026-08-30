@@ -1,0 +1,7 @@
+# Direct dependencies of ui.py. Transitive versions are locked in
+# constraints.ui.txt; the base image is pinned by digest in ui.Dockerfile.
+# gradio is deliberately exact: ">=5" silently resolved to 6.x, which moved
+# `theme` off the Blocks constructor and left the UI unthemed.
+gradio==6.26.0
+httpx==0.28.1
+pillow==12.3.0

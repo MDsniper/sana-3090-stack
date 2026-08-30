@@ -236,10 +236,14 @@ with image `sana-server:latest` still built.
 ├── docker-compose.yml               # sana-engine + sana-ui (+ llama.cpp LLM service)
 └── sana-sglang/
     ├── engine_diffusers.py          # engine: FastAPI + diffusers SANA-1.5 4.8B
-    ├── engine.Dockerfile            # engine image (pytorch 2.9.1-cu128 base)
+    ├── engine.Dockerfile            # engine image (pytorch 2.9.1-cu128 base, digest-pinned)
     ├── engine.sglang.Dockerfile     # OPTIONAL SGLang variant (lmsysorg/sglang:dev-cu12)
     ├── ui.py                        # Gradio UI: improver · formats · styles · library
-    ├── ui.Dockerfile                # UI image (python:3.12-slim, ~200 MB, no CUDA)
+    ├── ui.Dockerfile                # UI image (python:3.12-slim, ~200 MB, no CUDA, digest-pinned)
+    ├── requirements.engine.txt      # engine direct deps, exact pins
+    ├── requirements.ui.txt          # UI direct deps, exact pins
+    ├── constraints.engine.txt       # engine transitive closure (generated)
+    ├── constraints.ui.txt           # UI transitive closure (generated)
     └── fooocus_styles.json          # 277-style Fooocus pack (swap file to restyle)
 ```
 

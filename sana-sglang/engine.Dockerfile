@@ -1,21 +1,14 @@
-FROM pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime
+# Base pinned by digest; the tag is kept alongside for readability only.
+FROM pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime@sha256:7b324d212a4450795b49edba9949b7cdc72429148a64e974334bfe5774d51385
 
-# Pinned to the exact set measured on this box (see README §5). Floating
-# ranges here drift on every rebuild: transformers had already moved 4.x -> 5.x
-# under a ">=4.53" pin. To move a pin deliberately, bump it, rebuild, and
-# re-verify a generation before committing.
-RUN pip install --no-cache-dir \
-    "diffusers==0.40.0" \
-    "transformers==5.16.1" \
-    "accelerate==1.14.0" \
-    "sentencepiece==0.2.2" \
-    "protobuf==7.36.0" \
-    "safetensors==0.8.0" \
-    "fastapi==0.141.1" \
-    "uvicorn[standard]==0.52.4" \
-    "pillow==11.3.0" \
-    "python-multipart==0.0.32"
+# Build inputs are fully locked: base digest above, direct pins in
+# requirements.engine.txt, transitive closure in constraints.engine.txt.
+# These were ranges once and drifted a major version unnoticed (transformers
+# 4.x -> 5.x), so a rebuild silently changed what shipped. Keep them exact.
 WORKDIR /app
+COPY requirements.engine.txt constraints.engine.txt ./
+RUN pip install --no-cache-dir -r requirements.engine.txt -c constraints.engine.txt
+
 COPY engine_diffusers.py .
 
 ENV HF_HOME=/data/hf-cache \

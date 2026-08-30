@@ -1,12 +1,14 @@
-FROM python:3.12-slim
+# Base pinned by digest; the tag is kept alongside for readability only.
+FROM python:3.12-slim@sha256:a249c9f47e05708dd367f3fe8ada03cf347390fad66fb8b0518c0ef55ae3cb84
 
-# Pinned: ">=5" silently resolved to 6.x, which moved `theme` off the Blocks
-# constructor and rendered the UI unthemed. Bump deliberately, then re-verify.
-RUN pip install --no-cache-dir \
-    "gradio==6.26.0" \
-    "httpx==0.28.1" \
-    "pillow==12.3.0"
+# Build inputs are fully locked: base digest above, direct pins in
+# requirements.ui.txt, transitive closure in constraints.ui.txt. ">=5" once
+# resolved to gradio 6, which moved `theme` off the Blocks constructor and
+# left the UI rendering unthemed. Keep them exact.
 WORKDIR /app
+COPY requirements.ui.txt constraints.ui.txt ./
+RUN pip install --no-cache-dir -r requirements.ui.txt -c constraints.ui.txt
+
 COPY ui.py fooocus_styles.json ./
 
 ENV SANA_PORT=7860 \

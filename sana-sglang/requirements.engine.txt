@@ -1,0 +1,15 @@
+# Direct dependencies of engine_diffusers.py, pinned to the set measured on
+# the RTX 3090 (README section 5). Transitive versions are locked separately in
+# constraints.engine.txt; the base image is pinned by digest in engine.Dockerfile.
+# To move a pin: bump here, rebuild, regenerate constraints (see that file's
+# header), and re-verify a generation and a caption before committing.
+diffusers==0.40.0
+transformers==5.16.1
+accelerate==1.14.0
+sentencepiece==0.2.2
+protobuf==7.36.0
+safetensors==0.8.0
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pillow==11.3.0
+python-multipart==0.0.32
