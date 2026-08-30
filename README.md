@@ -199,6 +199,7 @@ curl http://localhost:30000/v1/images/generations \
 `POST /v1/images/caption` (multipart `file`) → BLIP-large caption for image remix
 (24 s cold incl. model download, 2.7 s warm; BLIP freed after each call so Clear VRAM
 stays true). Health reports `state: idle` after an unload — treated as healthy by design.
+
 `GET /health` → `{status, state: idle|loading|ready|error, loaded_model}` ·
 `GET /v1/models` → served model descriptor. Generation is lock-serialized (single GPU,
 one pipeline resident).
