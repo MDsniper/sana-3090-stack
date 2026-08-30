@@ -1,0 +1,96 @@
+name: ai-stack
+
+x-llama-common: &llama-common
+  image: ghcr.io/ggml-org/llama.cpp:server-cuda
+  restart: unless-stopped
+  volumes:
+    - ./models:/models:ro
+
+services:
+  # Qwen3.5-35B-A3B-Claude-4.6-Opus-Reasoning-Distilled, i1-Q4_K_M (21.2 GB).
+  # Hybrid arch: 30 linear-attention (GDN) + 10 full-attn layers (2 KV heads, head_dim 256),
+  # so 192k KV @ q8_0 is only ~2.1 GB. Routed MoE experts of --n-cpu-moe layers stay in
+  # host RAM (mmap) to fit the rest + KV in 24 GB; tune --n-cpu-moe against nvidia-smi.
+  qwen35-opus-rd:
+    <<: *llama-common
+    container_name: qwen35-opus-rd
+    command:
+      - -m
+      - /models/Qwen3.5-35B-A3B-Claude-4.6-Opus-Reasoning-Distilled.i1-Q4_K_M.gguf
+      - --alias
+      - qwen3.5-35b-opus-rd
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --n-gpu-layers
+      - "999"
+      - --n-cpu-moe
+      - "4"
+      - --ctx-size
+      - "196608"
+      - --cache-type-k
+      - q8_0
+      - --cache-type-v
+      - q8_0
+      - --flash-attn
+      - "on"
+      - --jinja
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 900s
+    deploy:
+      resources:
+        limits:
+          # Host RAM cap; ~4.7 GB of CPU-resident experts + mmap page cache headroom.
+          memory: 40g
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+  # SANA-1.5 4.8B text-to-image on GPU 1: OpenAI-style engine (:30000,
+  # /v1/images/generations, diffusers — measured 3.4x faster than SGLang on this
+  # 3090) + Gradio web UI (:7860). Single fixed model for best quality;
+  # UI defaults = its optima. SGLang variant kept in sana-sglang/engine.sglang.Dockerfile.
+  sana-engine:
+    build:
+      context: ./sana-sglang
+      dockerfile: engine.Dockerfile
+    image: sana-engine:latest
+    container_name: sana-engine
+    restart: unless-stopped
+    ports:
+      - "30000:30000"
+    volumes:
+      - sana-hf-cache:/data/hf-cache
+    deploy:
+      resources:
+        limits:
+          memory: 40g
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
+  sana-ui:
+    build:
+      context: ./sana-sglang
+      dockerfile: ui.Dockerfile
+    image: sana-ui:latest
+    container_name: sana-ui
+    restart: unless-stopped
+    depends_on:
+      - sana-engine
+    ports:
+      - "7860:7860"
+    volumes:
+      - sana-outputs:/data/outputs
+volumes:
+  sana-hf-cache:
+  sana-outputs:
